@@ -4,13 +4,7 @@ import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type Status =
-  | "saved"
-  | "applied"
-  | "oa"
-  | "interview"
-  | "offer"
-  | "rejected";
+type Status = "saved" | "applied" | "oa" | "interview" | "offer" | "rejected";
 
 type Application = {
   id: number;
@@ -41,20 +35,22 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 const STATUS_CLASS: Record<Status, string> = {
-  saved: "bg-slate-200 text-slate-800",
-  applied: "bg-indigo-100 text-indigo-800",
-  oa: "bg-amber-100 text-amber-800",
-  interview: "bg-violet-100 text-violet-800",
-  offer: "bg-emerald-100 text-emerald-800",
-  rejected: "bg-red-100 text-red-800",
+  saved: "bg-gray-100 text-gray-700",
+  applied: "bg-blue-100 text-blue-700",
+  oa: "bg-yellow-100 text-yellow-800",
+  interview: "bg-purple-100 text-purple-700",
+  offer: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
 };
 
 export default function HomePage() {
   const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [apps, setApps] = useState<Application[]>([]);
-  const [filter, setFilter] = useState<Status | "all">("all");
+  const [email, setEmail] = useState("");
+  const [rows, setRows] = useState<Application[]>([]);
+  const [filter, setFilter] = useState<"all" | Status>("all");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
@@ -62,172 +58,143 @@ export default function HomePage() {
   const [appliedDate, setAppliedDate] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+
+  async function load() {
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    setEmail(user.email ?? "");
+    const { data, error: qErr } = await supabase
+      .from("applications")
+      .select("id, company, job_title, status, applied_date, job_url, notes")
+      .order("created_at", { ascending: false });
+    if (qErr) setError(qErr.message);
+    else setRows((data as Application[]) ?? []);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      setEmail(user.email ?? null);
-
-      const { data, error } = await supabase
-        .from("applications")
-        .select("id, company, job_title, status, applied_date, job_url, notes")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        setError(error.message);
-      } else {
-        setApps((data as Application[]) || []);
-      }
-
-      setLoading(false);
-    };
-
     load();
   }, [router]);
 
-  const handleAdd = async (e: FormEvent) => {
+  async function handleAdd(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError("");
-
+    setSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
       if (!user) {
         router.push("/login");
         return;
       }
-
-      const { data, error } = await supabase
-        .from("applications")
-        .insert({
-          user_id: user.id,
-          company,
-          job_title: role,
-          status,
-          applied_date: appliedDate || null,
-          job_url: jobUrl || null,
-          notes: notes || null,
-        })
-        .select("id, company, job_title, status, applied_date, job_url, notes")
-        .single();
-
-      if (error) {
-        setError(error.message);
+      const { error: insErr } = await supabase.from("applications").insert({
+        user_id: user.id,
+        company,
+        job_title: role,
+        status,
+        applied_date: appliedDate || null,
+        job_url: jobUrl || null,
+        notes: notes || null,
+      });
+      if (insErr) {
+        setError(insErr.message);
         return;
       }
-
-      if (data) {
-        setApps((prev) => [data as Application, ...prev]);
-      }
-
       setCompany("");
       setRole("");
       setStatus("applied");
       setAppliedDate("");
       setJobUrl("");
       setNotes("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      await load();
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleStatus = async (id: number, next: Status) => {
-    const { error } = await supabase
+  async function handleStatus(id: number, next: Status) {
+    const { error: uErr } = await supabase
       .from("applications")
       .update({ status: next })
       .eq("id", id);
+    if (uErr) setError(uErr.message);
+    else setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: next } : r)));
+  }
 
-    if (error) {
-      setError(error.message);
-      return;
-    }
+  async function handleDelete(id: number) {
+    const { error: dErr } = await supabase.from("applications").delete().eq("id", id);
+    if (dErr) setError(dErr.message);
+    else setRows((prev) => prev.filter((r) => r.id !== id));
+  }
 
-    setApps((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: next } : a))
-    );
-  };
-
-  const handleDelete = async (id: number) => {
-    const { error } = await supabase.from("applications").delete().eq("id", id);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setApps((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  const logout = async () => {
+  async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
-  };
+  }
 
   const visible =
-    filter === "all" ? apps : apps.filter((a) => a.status === filter);
+    filter === "all" ? rows : rows.filter((r) => r.status === filter);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Loading…
+      <div className="flex min-h-screen items-center justify-center text-gray-500">
+        Loading...
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+      <header className="border-b bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <div>
             <h1 className="text-xl font-bold">Job Tracker</h1>
-            <p className="text-xs text-gray-500">{email}</p>
+            <p className="text-sm text-gray-500">{email}</p>
           </div>
           <button
             onClick={logout}
-            className="text-sm bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700"
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="font-semibold mb-4">Add application</h2>
-          <form
-            onSubmit={handleAdd}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <form
+          onSubmit={handleAdd}
+          className="mb-8 space-y-3 rounded-2xl border bg-white p-6"
+        >
+          <h2 className="font-semibold">Add application</h2>
+          <div className="grid gap-3 md:grid-cols-2">
             <input
-              required
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="Company (e.g. Amazon)"
-              className="px-3 py-2 border border-gray-300 rounded-lg"
+              className="rounded-lg border px-3 py-2"
+              required
             />
             <input
-              required
               value={role}
               onChange={(e) => setRole(e.target.value)}
               placeholder="Role (e.g. SDE intern)"
-              className="px-3 py-2 border border-gray-300 rounded-lg"
+              className="rounded-lg border px-3 py-2"
+              required
             />
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as Status)}
-              className="px-3 py-2 border border-gray-300 rounded-lg"
+              className="rounded-lg border px-3 py-2"
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -239,122 +206,103 @@ export default function HomePage() {
               type="date"
               value={appliedDate}
               onChange={(e) => setAppliedDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg"
+              className="rounded-lg border px-3 py-2"
             />
             <input
               value={jobUrl}
               onChange={(e) => setJobUrl(e.target.value)}
               placeholder="Job URL (optional)"
-              className="px-3 py-2 border border-gray-300 rounded-lg md:col-span-2"
+              className="rounded-lg border px-3 py-2 md:col-span-2"
             />
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Notes (optional)"
-              className="px-3 py-2 border border-gray-300 rounded-lg md:col-span-2"
+              className="rounded-lg border px-3 py-2 md:col-span-2"
             />
-            <button
-              type="submit"
-              disabled={saving}
-              className="md:col-span-2 bg-indigo-600 text-white py-2.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Add"}
-            </button>
-          </form>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        </section>
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full rounded-lg bg-indigo-600 py-3 text-white disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Add"}
+          </button>
+        </form>
 
-        <section>
-          <div className="flex flex-wrap gap-2 mb-4">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilter("all")}
+            className={`rounded-full px-3 py-1 text-sm ${
+              filter === "all" ? "bg-gray-900 text-white" : "bg-white border"
+            }`}
+          >
+            All ({rows.length})
+          </button>
+          {STATUSES.map((s) => (
             <button
-              onClick={() => setFilter("all")}
-              className={`px-3 py-1.5 rounded-lg text-sm ${
-                filter === "all"
-                  ? "bg-gray-900 text-white"
-                  : "bg-white border border-gray-300"
+              key={s}
+              onClick={() => setFilter(s)}
+              className={`rounded-full px-3 py-1 text-sm ${
+                filter === s ? "bg-gray-900 text-white" : "bg-white border"
               }`}
             >
-              All ({apps.length})
+              {STATUS_LABEL[s]}
             </button>
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-sm ${
-                  filter === s
-                    ? "bg-gray-900 text-white"
-                    : "bg-white border border-gray-300"
-                }`}
-              >
-                {STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
+          ))}
+        </div>
 
-          {visible.length === 0 ? (
-            <p className="text-gray-500 text-sm">
-              No applications here yet. Add Amazon / Meta above.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {visible.map((a) => (
-                <li
-                  key={a.id}
-                  className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-3"
+        <div className="space-y-3">
+          {visible.map((row) => (
+            <div
+              key={row.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4"
+            >
+              <div>
+                <p className="font-semibold">
+                  {row.company} · {row.job_title}
+                </p>
+                {row.applied_date && (
+                  <p className="text-xs text-gray-500">{row.applied_date}</p>
+                )}
+                {row.notes && (
+                  <p className="text-sm text-gray-600">{row.notes}</p>
+                )}
+                {row.job_url && (
+                  <a
+                    href={row.job_url}
+                    className="text-sm text-indigo-600"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Listing
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={row.status}
+                  onChange={(e) =>
+                    handleStatus(row.id, e.target.value as Status)
+                  }
+                  className={`rounded-lg px-2 py-1 text-sm ${STATUS_CLASS[row.status]}`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold">
-                      {a.company}{" "}
-                      <span className="font-normal text-gray-600">
-                        · {a.job_title}
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {a.applied_date ?? "No date"}
-                      {a.job_url ? (
-                        <>
-                          {" · "}
-                          <a
-                            href={a.job_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-indigo-600 hover:underline"
-                          >
-                            Listing
-                          </a>
-                        </>
-                      ) : null}
-                    </p>
-                    {a.notes ? (
-                      <p className="text-sm text-gray-600 mt-1">{a.notes}</p>
-                    ) : null}
-                  </div>
-
-                  <select
-                    value={a.status}
-                    onChange={(e) =>
-                      handleStatus(a.id, e.target.value as Status)
-                    }
-                    className={`px-2 py-1.5 rounded-lg text-sm ${STATUS_CLASS[a.status]}`}
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_LABEL[s]}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={() => handleDelete(a.id)}
-                    className="text-sm text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleDelete(row.id)}
+                  className="text-sm text-red-600"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
     </div>
   );
