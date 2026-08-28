@@ -1,11 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-
-const DEMO_EMAIL = "demo@tracker.app";
-const DEMO_PASSWORD = "Demo1234!";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,112 +10,108 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  async function signIn(eMail: string, pwd: string) {
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const isDark = saved === "dark" || (!saved && prefersDark);
+    document.documentElement.classList.toggle("dark", isDark);
+    setDarkMode(isDark);
+    setMounted(true);
+  }, []);
+
+  const toggleDarkMode = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
+  };
+
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-        setError("Missing NEXT_PUBLIC_SUPABASE_URL on Vercel.");
-        return;
-      }
-      const timed = new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                "Login timed out. Add the Vercel URL in Supabase → Authentication → URL configuration."
-              )
-            ),
-          12000
-        )
-      );
-      const login = supabase.auth.signInWithPassword({
-        email: eMail,
-        password: pwd,
+      const { error: signErr } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      const { error: authError } = await Promise.race([login, timed]);
-      if (authError) {
-        setError(authError.message);
+      if (signErr) {
+        setError(signErr.message);
         return;
       }
       router.push("/");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    await signIn(email, password);
-  }
+  const inputClass =
+    "w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-center text-3xl font-bold text-gray-900">
-          Job Tracker
-        </h1>
-        <p className="mt-2 text-center text-sm text-gray-500">
-          Track applications. Same account as the finance app.
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-gray-950">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Job Tracker
+            </h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Same login as the finance tracker
+            </p>
+          </div>
+          {mounted && (
+            <button
+              type="button"
+              onClick={toggleDarkMode}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:text-gray-200"
+            >
+              {darkMode ? "Light" : "Dark"}
+            </button>
+          )}
+        </div>
+
+        <p className="mb-6 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+          Recruiter?{" "}
+          <span className="font-medium">demo@tracker.app</span> /{" "}
+          <span className="font-medium">Demo1234!</span>
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              placeholder="Enter your email"
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            className={inputClass}
+            required
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className={inputClass}
+            required
+          />
           {error && (
-            <p className="text-center text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 py-3 font-medium text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-indigo-600 py-3 font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => signIn(DEMO_EMAIL, DEMO_PASSWORD)}
-          className="mt-3 w-full rounded-lg border border-gray-300 py-3 text-gray-700 disabled:opacity-40"
-        >
-          Try demo
-        </button>
-        <p className="mt-2 text-center text-xs text-gray-400">
-          Recruiter shortcut — shared demo account
-        </p>
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don&apos;t have an account?{" "}
-          <a href="/signup" className="text-indigo-600">
+        <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+          No account?{" "}
+          <a href="/signup" className="text-indigo-600 dark:text-indigo-400">
             Sign up
           </a>
         </p>

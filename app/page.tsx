@@ -35,12 +35,12 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 const STATUS_CLASS: Record<Status, string> = {
-  saved: "bg-gray-100 text-gray-700",
-  applied: "bg-blue-100 text-blue-700",
-  oa: "bg-yellow-100 text-yellow-800",
-  interview: "bg-purple-100 text-purple-700",
-  offer: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
+  saved: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200",
+  applied: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  oa: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
+  interview: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+  offer: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+  rejected: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
 
 export default function HomePage() {
@@ -51,6 +51,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
@@ -58,6 +60,22 @@ export default function HomePage() {
   const [appliedDate, setAppliedDate] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const isDark = saved === "dark" || (!saved && prefersDark);
+    document.documentElement.classList.toggle("dark", isDark);
+    setDarkMode(isDark);
+    setMounted(true);
+  }, []);
+
+  const toggleDarkMode = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
+  };
 
   async function load() {
     const { data: userData } = await supabase.auth.getUser();
@@ -136,44 +154,56 @@ export default function HomePage() {
     router.push("/login");
   }
 
-  const visible =
-    filter === "all" ? rows : rows.filter((r) => r.status === filter);
+  const visible = filter === "all" ? rows : rows.filter((r) => r.status === filter);
+
+  const inputClass =
+    "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100";
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-gray-500">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400">
         Loading...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900">
-      <header className="border-b bg-white">
+    <div className="min-h-screen bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <div>
             <h1 className="text-xl font-bold">Job Tracker</h1>
-            <p className="text-sm text-gray-500">{email}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{email}</p>
           </div>
-          <button
-            onClick={logout}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                onClick={toggleDarkMode}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+              >
+                {darkMode ? "Light" : "Dark"}
+              </button>
+            )}
+            <button
+              onClick={logout}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
         {error && (
-          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
             {error}
           </p>
         )}
 
         <form
           onSubmit={handleAdd}
-          className="mb-8 space-y-3 rounded-2xl border bg-white p-6"
+          className="mb-8 space-y-3 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
         >
           <h2 className="font-semibold">Add application</h2>
           <div className="grid gap-3 md:grid-cols-2">
@@ -181,20 +211,20 @@ export default function HomePage() {
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="Company (e.g. Amazon)"
-              className="rounded-lg border px-3 py-2"
+              className={inputClass}
               required
             />
             <input
               value={role}
               onChange={(e) => setRole(e.target.value)}
               placeholder="Role (e.g. SDE intern)"
-              className="rounded-lg border px-3 py-2"
+              className={inputClass}
               required
             />
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as Status)}
-              className="rounded-lg border px-3 py-2"
+              className={inputClass}
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -206,19 +236,19 @@ export default function HomePage() {
               type="date"
               value={appliedDate}
               onChange={(e) => setAppliedDate(e.target.value)}
-              className="rounded-lg border px-3 py-2"
+              className={inputClass}
             />
             <input
               value={jobUrl}
               onChange={(e) => setJobUrl(e.target.value)}
               placeholder="Job URL (optional)"
-              className="rounded-lg border px-3 py-2 md:col-span-2"
+              className={`${inputClass} md:col-span-2`}
             />
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Notes (optional)"
-              className="rounded-lg border px-3 py-2 md:col-span-2"
+              className={`${inputClass} md:col-span-2`}
             />
           </div>
           <button
@@ -234,7 +264,9 @@ export default function HomePage() {
           <button
             onClick={() => setFilter("all")}
             className={`rounded-full px-3 py-1 text-sm ${
-              filter === "all" ? "bg-gray-900 text-white" : "bg-white border"
+              filter === "all"
+                ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                : "border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-900"
             }`}
           >
             All ({rows.length})
@@ -244,7 +276,9 @@ export default function HomePage() {
               key={s}
               onClick={() => setFilter(s)}
               className={`rounded-full px-3 py-1 text-sm ${
-                filter === s ? "bg-gray-900 text-white" : "bg-white border"
+                filter === s
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-900"
               }`}
             >
               {STATUS_LABEL[s]}
@@ -256,22 +290,24 @@ export default function HomePage() {
           {visible.map((row) => (
             <div
               key={row.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
             >
               <div>
                 <p className="font-semibold">
                   {row.company} · {row.job_title}
                 </p>
                 {row.applied_date && (
-                  <p className="text-xs text-gray-500">{row.applied_date}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {row.applied_date}
+                  </p>
                 )}
                 {row.notes && (
-                  <p className="text-sm text-gray-600">{row.notes}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{row.notes}</p>
                 )}
                 {row.job_url && (
                   <a
                     href={row.job_url}
-                    className="text-sm text-indigo-600"
+                    className="text-sm text-indigo-600 dark:text-indigo-400"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -282,9 +318,7 @@ export default function HomePage() {
               <div className="flex items-center gap-3">
                 <select
                   value={row.status}
-                  onChange={(e) =>
-                    handleStatus(row.id, e.target.value as Status)
-                  }
+                  onChange={(e) => handleStatus(row.id, e.target.value as Status)}
                   className={`rounded-lg px-2 py-1 text-sm ${STATUS_CLASS[row.status]}`}
                 >
                   {STATUSES.map((s) => (
@@ -295,7 +329,7 @@ export default function HomePage() {
                 </select>
                 <button
                   onClick={() => handleDelete(row.id)}
-                  className="text-sm text-red-600"
+                  className="text-sm text-red-600 dark:text-red-400"
                 >
                   Delete
                 </button>
