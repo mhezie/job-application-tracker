@@ -78,10 +78,10 @@ export default function HomePage() {
   };
 
   async function load() {
-    const { data: userData } = await supabase.auth.getUser();
-    const user = userData.user;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const user = sessionData.session?.user;
     if (!user) {
-      router.push("/login");
+      router.replace("/login");
       return;
     }
     setEmail(user.email ?? "");
@@ -103,10 +103,10 @@ export default function HomePage() {
     setError("");
     setSaving(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData.user;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
       if (!user) {
-        router.push("/login");
+        router.replace("/login");
         return;
       }
       const { error: insErr } = await supabase.from("applications").insert({
@@ -151,7 +151,7 @@ export default function HomePage() {
 
   async function logout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.replace("/login");
   }
 
   const visible = filter === "all" ? rows : rows.filter((r) => r.status === filter);
@@ -161,8 +161,15 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400">
-        Loading...
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 px-4 text-center text-gray-600 dark:bg-gray-950 dark:text-gray-400">
+        <p>Checking session…</p>
+        <a href="/login" className="text-indigo-600 underline dark:text-indigo-400">
+          Continue to sign in
+        </a>
+        <p className="text-sm">
+          Recruiter? <span className="font-medium">demo@tracker.app</span> /{" "}
+          <span className="font-medium">Demo1234!</span>
+        </p>
       </div>
     );
   }
@@ -281,62 +288,70 @@ export default function HomePage() {
                   : "border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-900"
               }`}
             >
-              {STATUS_LABEL[s]}
+              {STATUS_LABEL[s]} ({rows.filter((r) => r.status === s).length})
             </button>
           ))}
         </div>
 
-        <div className="space-y-3">
-          {visible.map((row) => (
-            <div
-              key={row.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div>
-                <p className="font-semibold">
-                  {row.company} · {row.job_title}
-                </p>
-                {row.applied_date && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {row.applied_date}
+        {visible.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+            {filter === "all"
+              ? "No applications yet. Add Amazon / Meta / a UK grad scheme so the board is not empty for recruiters."
+              : `Nothing in ${STATUS_LABEL[filter]}.`}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {visible.map((row) => (
+              <div
+                key={row.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+              >
+                <div>
+                  <p className="font-semibold">
+                    {row.company} · {row.job_title}
                   </p>
-                )}
-                {row.notes && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{row.notes}</p>
-                )}
-                {row.job_url && (
-                  <a
-                    href={row.job_url}
-                    className="text-sm text-indigo-600 dark:text-indigo-400"
-                    target="_blank"
-                    rel="noreferrer"
+                  {row.applied_date && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {row.applied_date}
+                    </p>
+                  )}
+                  {row.notes && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{row.notes}</p>
+                  )}
+                  {row.job_url && (
+                    <a
+                      href={row.job_url}
+                      className="text-sm text-indigo-600 dark:text-indigo-400"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Listing
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={row.status}
+                    onChange={(e) => handleStatus(row.id, e.target.value as Status)}
+                    className={`rounded-lg px-2 py-1 text-sm ${STATUS_CLASS[row.status]}`}
                   >
-                    Listing
-                  </a>
-                )}
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABEL[s]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleDelete(row.id)}
+                    className="text-sm text-red-600 dark:text-red-400"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <select
-                  value={row.status}
-                  onChange={(e) => handleStatus(row.id, e.target.value as Status)}
-                  className={`rounded-lg px-2 py-1 text-sm ${STATUS_CLASS[row.status]}`}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => handleDelete(row.id)}
-                  className="text-sm text-red-600 dark:text-red-400"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
